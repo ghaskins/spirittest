@@ -1,5 +1,5 @@
 
-CFLAGS += -g -O0
+CFLAGS += -g -O0 -std=c++0x
 ARCH=$(shell uname -m)
 OBJDIR ?= obj/$(ARCH)
 PREFIX ?= /usr/local
