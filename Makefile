@@ -4,8 +4,7 @@ ARCH=$(shell uname -m)
 OBJDIR ?= obj/$(ARCH)
 PREFIX ?= /usr/local
 LIBRARIES += -lboost_program_options
-LIBRARIES += -lrt
-NAME=exchangesim
+NAME=spirittest
 INSTPATH=$(PREFIX)/bin
 
 VERSION=0.1
