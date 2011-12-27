@@ -9,6 +9,7 @@
 #include <boost/spirit/include/phoenix_operator.hpp>
 #include <boost/spirit/include/phoenix_stl.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
+#include <boost/variant.hpp>
 #include <boost/variant/recursive_variant.hpp>
 #include <boost/foreach.hpp>
 #include <boost/program_options.hpp>
@@ -64,11 +65,53 @@ private:
   Stack   m_stack;
 };
 
-typedef std::list<std::string> ResultType;
+enum OpTag
+  {
+    AND,
+    OR
+  };
+
+template <OpTag tag>
+struct Operand
+{
+  Operand() : m_type(tag) {}
+
+  OpTag m_type;
+};
+
+template <OpTag T>
+std::ostream& operator<<(std::ostream &os, const Operand<T> &o)
+{
+  switch(o.m_type)
+    {
+    case AND:
+      os << "&";
+      break;
+    case OR:
+      os << "|";
+      break;
+    default:
+      throw std::runtime_error("Unexpected operand");
+    }
+}
+
+class Collection;
+
+typedef boost::variant<
+  std::string,
+  Operand<AND>,
+  Operand<OR>,
+  boost::recursive_wrapper< Collection >
+  > Term;
+
+class Collection : public std::vector<Term>
+{
+
+};
 
 template <typename Iterator>
 struct query_grammar
-  : qi::grammar<Iterator, ResultType(), ascii::space_type>
+  : qi::grammar<Iterator, Collection(), ascii::space_type>
 {
   query_grammar()
     : query_grammar::base_type(expression)
@@ -76,11 +119,14 @@ struct query_grammar
     using qi::lit;
     using qi::lexeme;
     using qi::eol;
+    using qi::_a;
+    using qi::_1;
+    using boost::phoenix::push_back;
     using ascii::char_;
     using ascii::string;
     using namespace qi::labels;
     
-    //group       = lit('(') >> expression >> lit(')');
+    group       = lit('(') >> expression >> lit(')');
     term = lexeme[
 		  +(
 		    char_
@@ -94,16 +140,64 @@ struct query_grammar
 		    )
 		  ];
 
-    //factor      = group | term;
-    factor      = term;
-    expression  = factor >> *((lit('&') >> factor) | (lit('|') >> factor));
+    factor      = group | term;
+    afactor     = lit('&') >> factor;
+    ofactor     = lit('|') >> factor;
+    expression  = factor >> *(afactor | ofactor);
+
+    group.name("group");
+    term.name("term");
+    factor.name("factor");
+    afactor.name("afactor");
+    ofactor.name("ofactor");
+    expression.name("expression");
+
+    debug(group);
+    debug(term);
+    debug(factor);
+    debug(afactor);
+    debug(ofactor);
+    debug(expression);
   }
   
-  qi::rule<Iterator, ResultType(), ascii::space_type> expression;
-  qi::rule<Iterator, std::string(), ascii::space_type> factor;
+  qi::rule<Iterator, Collection(), ascii::space_type> expression;
+  qi::rule<Iterator, Term(), ascii::space_type> factor;
+  qi::rule<Iterator, Term(), ascii::space_type> afactor;
+  qi::rule<Iterator, Term(), ascii::space_type> ofactor;
   qi::rule<Iterator, std::string(), ascii::space_type> term;
-  //qi::rule<Iterator, std::string(), ascii::space_type> group;
+  qi::rule<Iterator, Collection(), ascii::space_type> group;
 
+};
+
+class Printer : public boost::static_visitor<>
+{
+public:
+  void operator()(const std::string &i) const {
+    std::cout << i;
+  }
+
+  template <OpTag tag>
+  void operator()(const Operand<tag> &o) const {
+    std::cout << o;
+  }
+
+  void operator()(const Collection &c) const {
+    int i(0);
+
+    std::cout << "[";
+
+    for (Collection::const_iterator iter(c.begin());
+	 iter != c.end(); ++iter)
+      {
+	if (i)
+	  std::cout << ", ";
+
+	boost::apply_visitor(*this, *iter);
+	i++;
+      }
+
+    std::cout << "]";
+  }
 };
 
 int main(int argc, char **argv) {
@@ -141,19 +235,26 @@ int main(int argc, char **argv) {
 
   query_grammar g; // Our grammar
 
-  ResultType result;
+  Collection result;
 
   bool r = phrase_parse(query.begin(), query.end(), g, space, result);
 
   std::cout << "query: "   << query
 	    << " r: "      << r
-	    << " result: ";
+	    << " results(" << result.size() << "): [";
 
-  for (ResultType::const_iterator iter(result.begin());
+  int i(0);
+
+  for (Collection::const_iterator iter(result.begin());
        iter != result.end(); ++iter)
     {
-      std::cout << ":" << *iter;
+      if (i)
+	std::cout << ", ";
+
+      boost::apply_visitor(Printer(), *iter);
+
+      i++;
     }
 
-  std::cout << std::endl;
+  std::cout << "]" << std::endl;
 }
