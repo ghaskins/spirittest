@@ -12,7 +12,6 @@
 #include <boost/variant/recursive_variant.hpp>
 #include <boost/foreach.hpp>
 #include <boost/program_options.hpp>
-#include <boost/tokenizer.hpp>
 
 namespace po = boost::program_options;
 namespace qi = boost::spirit::qi;
@@ -20,25 +19,39 @@ namespace ascii = boost::spirit::ascii;
 
 typedef std::set<unsigned> IntSet;
 
+void do_term(const std::vector<char> &term)
+{
+  std::cout << "term: ";
+
+  for (std::vector<char>::const_iterator iter(term.begin());
+       iter != term.end(); ++iter)
+    {
+      std::cout << *iter;
+    }
+
+  std::cout << std::endl;
+}
+
 template <typename Iterator>
 struct query_grammar
-  : qi::grammar<Iterator, IntSet, ascii::space_type>
+  : qi::grammar<Iterator, std::string(), ascii::space_type>
 {
   query_grammar()
     : query_grammar::base_type(expression)
   {
     using qi::lit;
     using qi::lexeme;
+    using qi::eol;
     using ascii::char_;
     using ascii::string;
     using namespace qi::labels;
     
     group       = '(' >> expression >> ')';
-    factor      = *char_ | group;
+    factor      = group | lexeme[+(char_ - (lit(' ') | lit(')') | lit('&') | lit('|') | eol))][&do_term];
     expression  = factor >> *(('&' >> factor) | ('|' >> factor));
   }
   
-  qi::rule<Iterator, IntSet, ascii::space_type> expression;
+  qi::rule<Iterator, std::string(), ascii::space_type> expression;
   qi::rule<Iterator, std::string(), ascii::space_type> factor;
   qi::rule<Iterator, std::string(), ascii::space_type> group;
 };
@@ -73,18 +86,6 @@ int main(int argc, char **argv) {
     "Four score and seven years ago",
     "I have a dream"
   };
-
-  std::vector<StringList> content;
-
-  for(StringList::iterator iter(_init.begin()); iter != _init.end(); ++iter) {
-    boost::tokenizer<> tok(*iter);
-    StringList tokens;
-    for(boost::tokenizer<>::iterator iter(tok.begin()); iter != tok.end(); ++iter) {
-      tokens.push_back(*iter);
-    }
-
-    content.push_back(tokens);
-  }
 
   using boost::spirit::ascii::space;
   typedef std::string::iterator iterator_type;
