@@ -32,6 +32,37 @@ void do_term(const std::vector<char> &term)
   std::cout << std::endl;
 }
 
+class State
+{
+public:
+  typedef std::list<std::string> Strings;
+
+  State(const Strings &strings) : m_state(strings) {}
+
+  void push(const std::string term)
+  {
+    Strings matched;
+
+    for (Strings::const_iterator iter(m_state.begin());
+	 iter != m_state.end();
+	 ++iter)
+      {
+	const std::string &item(*iter);
+
+	if (item.find(term) != item.npos)
+	  matched.push_back(item);
+      }
+
+    m_stack.push_back(matched);
+  }
+
+private:
+  typedef std::list<Strings> Stack;
+
+  Strings m_state;
+  Stack   m_stack;
+};
+
 template <typename Iterator>
 struct query_grammar
   : qi::grammar<Iterator, std::string(), ascii::space_type>
@@ -54,6 +85,7 @@ struct query_grammar
   qi::rule<Iterator, std::string(), ascii::space_type> expression;
   qi::rule<Iterator, std::string(), ascii::space_type> factor;
   qi::rule<Iterator, std::string(), ascii::space_type> group;
+
 };
 
 int main(int argc, char **argv) {
@@ -79,9 +111,7 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  typedef std::list<std::string> StringList;
-
-  StringList _init = {
+  State::Strings _init = {
     "The quick brown fox jumped over the lazy dog",
     "Four score and seven years ago",
     "I have a dream"
