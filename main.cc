@@ -37,6 +37,7 @@ class State
 public:
   typedef std::list<std::string> Strings;
 
+  State() {}
   State(const Strings &strings) : m_state(strings) {}
 
   void push(const std::string term)
@@ -63,9 +64,11 @@ private:
   Stack   m_stack;
 };
 
+typedef std::list<std::string> ResultType;
+
 template <typename Iterator>
 struct query_grammar
-  : qi::grammar<Iterator, std::string(), ascii::space_type>
+  : qi::grammar<Iterator, ResultType(), ascii::space_type>
 {
   query_grammar()
     : query_grammar::base_type(expression)
@@ -77,14 +80,29 @@ struct query_grammar
     using ascii::string;
     using namespace qi::labels;
     
-    group       = '(' >> expression >> ')';
-    factor      = group | lexeme[+(char_ - (lit(' ') | lit(')') | lit('&') | lit('|') | eol))][&do_term];
-    expression  = factor >> *(('&' >> factor) | ('|' >> factor));
+    //group       = lit('(') >> expression >> lit(')');
+    term = lexeme[
+		  +(
+		    char_
+		    - (
+		       lit(' ') |
+		       lit(')') |
+		       lit('&') |
+		       lit('|') |
+		       eol
+		       )
+		    )
+		  ];
+
+    //factor      = group | term;
+    factor      = term;
+    expression  = factor >> *((lit('&') >> factor) | (lit('|') >> factor));
   }
   
-  qi::rule<Iterator, std::string(), ascii::space_type> expression;
+  qi::rule<Iterator, ResultType(), ascii::space_type> expression;
   qi::rule<Iterator, std::string(), ascii::space_type> factor;
-  qi::rule<Iterator, std::string(), ascii::space_type> group;
+  qi::rule<Iterator, std::string(), ascii::space_type> term;
+  //qi::rule<Iterator, std::string(), ascii::space_type> group;
 
 };
 
@@ -123,11 +141,19 @@ int main(int argc, char **argv) {
 
   query_grammar g; // Our grammar
 
-  IntSet result;
+  ResultType result;
 
   bool r = phrase_parse(query.begin(), query.end(), g, space, result);
 
-  std::cout << "query: " << query
-	    << " result: " << r
-	    << std::endl;
+  std::cout << "query: "   << query
+	    << " r: "      << r
+	    << " result: ";
+
+  for (ResultType::const_iterator iter(result.begin());
+       iter != result.end(); ++iter)
+    {
+      std::cout << ":" << *iter;
+    }
+
+  std::cout << std::endl;
 }
