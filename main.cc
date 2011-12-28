@@ -102,6 +102,7 @@ struct query_grammar
     
     group       = lit('(') >> expression >> lit(')');
     term = lexeme[
+		  !lit('(') >>
 		  +(
 		    char_
 		    - (
@@ -387,6 +388,11 @@ int main(int argc, char **argv) {
   Ast::Operand result;
 
   bool r = phrase_parse(query.begin(), query.end(), g, space, result);
+
+  if (!r) {
+    std::cout << "Error: \"" << query << "\" is not a valid query" << std::endl;
+    return -1;
+  }
 
   AstSolver astsolver;
 
