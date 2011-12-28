@@ -150,6 +150,36 @@ namespace Op
     boost::recursive_wrapper< Operation >
     > Operand;
 
+  class MatchSolver : public boost::static_visitor<>
+  {
+  public:
+    MatchSolver(const Strings &strings) : m_strings(strings), m_complete(false) {}
+    
+    IntSet get() { return m_docs; }
+    
+    template<typename T>
+    void operator()(const T &t) {
+      assert(!m_complete);
+      m_docs = t.solve(m_strings);
+      m_complete = true;
+    }
+    
+  private:
+    const Strings &m_strings;
+    bool m_complete;
+    IntSet m_docs;
+  };
+
+  inline IntSet
+  solve(const Strings &strings, const Operand &op) {
+    MatchSolver solver(strings);
+    IntSet result;
+
+    boost::apply_visitor(solver, op);
+
+    return solver.get();
+  }
+
   class Term {
   public:
     friend std::ostream& operator<<(std::ostream &os, const Term &t);
@@ -157,8 +187,18 @@ namespace Op
     Term() {}
     Term(const Ast::Term &term) : m_term(term) {}
 
-    IntSet solve(const Strings &strings) {
-      return IntSet();
+    IntSet solve(const Strings &strings) const {
+      IntSet result;
+      int i(0);
+
+      for (int i(0); i < strings.size(); ++i) {
+	const std::string &item(strings[i]);
+	
+	if (item.find(m_term) != item.npos)
+	  result.insert(i);
+      }
+      
+      return result;
     }
 
   private:
@@ -187,8 +227,11 @@ namespace Op
 
     Type type() const { return m_type; }
 
-    IntSet solve(const Strings &strings) {
-      return IntSet();
+    IntSet solve(const Strings &strings) const {
+      IntSet r1(Op::solve(strings, first)), r2(Op::solve(strings, second));
+      IntSet result;
+      
+      return result;
     }
 
   private:
@@ -290,47 +333,10 @@ public:
     m_stack.push(solver.get());
   }
 
-#if 0
-  void push(const std::string term)
-  {
-    Strings matched;
-
-    for (Strings::const_iterator iter(m_state.begin());
-	 iter != m_state.end();
-	 ++iter)
-      {
-	const std::string &item(*iter);
-
-	if (item.find(term) != item.npos)
-	  matched.push_back(item);
-      }
-
-    m_stack.push_back(matched);
-  }
-#endif
-
 private:
   typedef std::stack<Op::Operand> Stack;
 
   Stack          m_stack;
-};
-
-class OpSolver : public boost::static_visitor<>
-{
-public:
-  OpSolver(const Op::Strings &strings) : m_strings(strings) {}
-
-  Op::IntSet get() { return m_docs; }
-
-  void operator()(const Op::Term &term) {
-  }
-
-  void operator()(const Op::Operation &op) {
-  }
-
-private:
-  const Op::Strings &m_strings;
-  Op::IntSet         m_docs;
 };
 
 int main(int argc, char **argv) {
@@ -376,16 +382,14 @@ int main(int argc, char **argv) {
     "I have a dream"
   };
 
-  OpSolver opsolver(_init);
   Op::Operand astresult(astsolver.get());
-
-  boost::apply_visitor(opsolver, astresult);
+  Op::IntSet docs(Op::solve(_init, astresult));
 
   std::cout << "query: "       << query
 	    << " r: "          << r
 	    << " results: "    << result
 	    << " astsolver: "  << astsolver.get()
-	    << " opsolver: "   << opsolver.get()
+	    << " opsolver: "   << docs
 	    << std::endl;
 
 }
