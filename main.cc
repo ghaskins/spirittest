@@ -139,12 +139,30 @@ struct query_grammar
 
 namespace Op
 {
+  class Term;
   class Operation;
 
   typedef boost::variant<
-    Ast::Term,
+    Term,
     boost::recursive_wrapper< Operation >
     > Operand;
+
+  class Term {
+  public:
+    friend std::ostream& operator<<(std::ostream &os, const Term &t);
+
+    Term() {}
+    Term(const Ast::Term &term) : m_term(term) {}
+
+  private:
+    Ast::Term m_term;
+  };
+
+  std::ostream& operator<<(std::ostream &os, const Term &t) {
+    os << t.m_term;
+
+    return os;
+  }
 
   class Operation : public std::pair<Operand, Operand>
   {
