@@ -3,6 +3,7 @@
 #include <list>
 #include <vector>
 
+#include <boost/spirit/include/support_utree.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/qi_string.hpp>
 #include <boost/spirit/include/phoenix_core.hpp>
@@ -65,53 +66,70 @@ private:
   Stack   m_stack;
 };
 
-enum OpTag
+namespace Ast
+{
+  typedef std::string Term;
+  struct Operation;
+  struct Program;
+  
+  typedef boost::variant<
+    Term,
+    boost::recursive_wrapper< Operation >,
+    boost::recursive_wrapper< Program >
+    > Operand;
+
+  struct Operation
   {
-    AND,
-    OR
+    char    m_type;
+    Operand m_operand;
   };
 
-template <OpTag tag>
-struct Operand
-{
-  Operand() : m_type(tag) {}
+  std::ostream& operator<<(std::ostream &os, const Ast::Operation &o)
+  {
+    os << "Operation::[" << o.m_type << ", " << o.m_operand << "]";
+    
+    return os;
+  }
 
-  OpTag m_type;
+  struct Program
+  {
+    typedef std::list<Operation> Operations;
+
+    Operand    m_first;
+    Operations m_rest;
+  };
+
+  std::ostream& operator<<(std::ostream &os, const Ast::Program &p)
+  {
+    os << "Program::[" << p.m_first;
+    
+    for (Ast::Program::Operations::const_iterator iter(p.m_rest.begin());
+	 iter != p.m_rest.end(); ++iter)
+      {
+	os << ", " << *iter;
+      }
+    
+    os << "]";
+    
+    return os;
+  }
 };
 
-template <OpTag T>
-std::ostream& operator<<(std::ostream &os, const Operand<T> &o)
-{
-  switch(o.m_type)
-    {
-    case AND:
-      os << "&";
-      break;
-    case OR:
-      os << "|";
-      break;
-    default:
-      throw std::runtime_error("Unexpected operand");
-    }
-}
+BOOST_FUSION_ADAPT_STRUCT(
+    Ast::Operation,
+    (char,         m_type)
+    (Ast::Operand, m_operand)
+)
 
-class Collection;
-
-typedef boost::variant<
-  std::string,
-  Operand<AND>,
-  Operand<OR>,
-  boost::recursive_wrapper< Collection >
-  > Term;
-
-class Collection : public std::vector<Term>
-{
-
-};
+BOOST_FUSION_ADAPT_STRUCT(
+    Ast::Program,
+    (Ast::Operand, m_first)
+    (Ast::Program::Operations, m_rest)
+)
 
 template <typename Iterator>
 struct query_grammar
-  : qi::grammar<Iterator, Collection(), ascii::space_type>
+  : qi::grammar<Iterator, Ast::Program(), ascii::space_type>
 {
   query_grammar()
     : query_grammar::base_type(expression)
@@ -141,63 +159,24 @@ struct query_grammar
 		  ];
 
     factor      = group | term;
-    afactor     = lit('&') >> factor;
-    ofactor     = lit('|') >> factor;
-    expression  = factor >> *(afactor | ofactor);
+    expression  = factor >> *((char_('&') >> factor) | (char_('|') >> factor));
 
     group.name("group");
     term.name("term");
     factor.name("factor");
-    afactor.name("afactor");
-    ofactor.name("ofactor");
     expression.name("expression");
 
     debug(group);
     debug(term);
     debug(factor);
-    debug(afactor);
-    debug(ofactor);
     debug(expression);
   }
   
-  qi::rule<Iterator, Collection(), ascii::space_type> expression;
-  qi::rule<Iterator, Term(), ascii::space_type> factor;
-  qi::rule<Iterator, Term(), ascii::space_type> afactor;
-  qi::rule<Iterator, Term(), ascii::space_type> ofactor;
-  qi::rule<Iterator, std::string(), ascii::space_type> term;
-  qi::rule<Iterator, Collection(), ascii::space_type> group;
+  qi::rule<Iterator, Ast::Program(), ascii::space_type> expression;
+  qi::rule<Iterator, Ast::Operand(), ascii::space_type> factor;
+  qi::rule<Iterator, Ast::Term(), ascii::space_type> term;
+  qi::rule<Iterator, Ast::Program(), ascii::space_type> group;
 
-};
-
-class Printer : public boost::static_visitor<>
-{
-public:
-  void operator()(const std::string &i) const {
-    std::cout << i;
-  }
-
-  template <OpTag tag>
-  void operator()(const Operand<tag> &o) const {
-    std::cout << o;
-  }
-
-  void operator()(const Collection &c) const {
-    int i(0);
-
-    std::cout << "[";
-
-    for (Collection::const_iterator iter(c.begin());
-	 iter != c.end(); ++iter)
-      {
-	if (i)
-	  std::cout << ", ";
-
-	boost::apply_visitor(*this, *iter);
-	i++;
-      }
-
-    std::cout << "]";
-  }
 };
 
 int main(int argc, char **argv) {
@@ -235,26 +214,12 @@ int main(int argc, char **argv) {
 
   query_grammar g; // Our grammar
 
-  Collection result;
+  Ast::Program result;
 
   bool r = phrase_parse(query.begin(), query.end(), g, space, result);
 
-  std::cout << "query: "   << query
-	    << " r: "      << r
-	    << " results(" << result.size() << "): [";
-
-  int i(0);
-
-  for (Collection::const_iterator iter(result.begin());
-       iter != result.end(); ++iter)
-    {
-      if (i)
-	std::cout << ", ";
-
-      boost::apply_visitor(Printer(), *iter);
-
-      i++;
-    }
-
-  std::cout << "]" << std::endl;
+  std::cout << "query: "    << query
+	    << " r: "       << r
+	    << " results: " << result
+	    << std::endl;
 }
