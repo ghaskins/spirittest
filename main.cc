@@ -86,7 +86,7 @@ namespace Ast
 
   std::ostream& operator<<(std::ostream &os, const Ast::Operation &o)
   {
-    os << "Operation::[" << o.m_type << ", " << o.m_operand << "]";
+    os << o.m_operand << ", " << o.m_type;
     
     return os;
   }
@@ -101,7 +101,7 @@ namespace Ast
 
   std::ostream& operator<<(std::ostream &os, const Ast::Program &p)
   {
-    os << "Program::[" << p.m_first;
+    os << "[" << p.m_first;
     
     for (Ast::Program::Operations::const_iterator iter(p.m_rest.begin());
 	 iter != p.m_rest.end(); ++iter)
