@@ -142,6 +142,9 @@ namespace Op
   class Term;
   class Operation;
 
+  typedef std::vector<std::string> Strings;
+  typedef std::set<int> IntSet;
+
   typedef boost::variant<
     Term,
     boost::recursive_wrapper< Operation >
@@ -153,6 +156,10 @@ namespace Op
 
     Term() {}
     Term(const Ast::Term &term) : m_term(term) {}
+
+    IntSet solve(const Strings &strings) {
+      return IntSet();
+    }
 
   private:
     Ast::Term m_term;
@@ -180,6 +187,10 @@ namespace Op
 
     Type type() const { return m_type; }
 
+    IntSet solve(const Strings &strings) {
+      return IntSet();
+    }
+
   private:
     Type m_type;
   };
@@ -203,6 +214,27 @@ namespace Op
   }
 
 };
+
+std::ostream& operator<<(std::ostream &os, const Op::IntSet &set)
+{
+  int i(0);
+  
+  os << "[";
+  
+  for(Op::IntSet::const_iterator iter(set.begin()); iter != set.end(); ++iter) {
+    if(i)
+      os << ", ";
+    
+    os << *iter;
+    
+    i++;
+  }
+  
+  os << "]";
+  
+  return os;
+}
+
 
 class AstSolver : public boost::static_visitor<>
 {
@@ -283,6 +315,24 @@ private:
   Stack          m_stack;
 };
 
+class OpSolver : public boost::static_visitor<>
+{
+public:
+  OpSolver(const Op::Strings &strings) : m_strings(strings) {}
+
+  Op::IntSet get() { return m_docs; }
+
+  void operator()(const Op::Term &term) {
+  }
+
+  void operator()(const Op::Operation &op) {
+  }
+
+private:
+  const Op::Strings &m_strings;
+  Op::IntSet         m_docs;
+};
+
 int main(int argc, char **argv) {
   int ret;
   std::string query;
@@ -306,33 +356,36 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-#if 0
-  State::Strings _init = {
-    "The quick brown fox jumped over the lazy dog",
-    "Four score and seven years ago",
-    "I have a dream"
-  };
-#endif
-
   using boost::spirit::ascii::space;
   typedef std::string::iterator iterator_type;
   typedef query_grammar<iterator_type> query_grammar;
 
   query_grammar g; // Our grammar
 
-  Ast::Program result;
+  Ast::Operand result;
 
   bool r = phrase_parse(query.begin(), query.end(), g, space, result);
 
-  AstSolver solver;
-  Ast::Operand operand(result);
+  AstSolver astsolver;
 
-  boost::apply_visitor(solver, operand);
+  boost::apply_visitor(astsolver, result);
 
-  std::cout << "query: "    << query
-	    << " r: "       << r
-	    << " results: " << result
-	    << " solver: "  << solver.get()
+  Op::Strings _init = {
+    "The quick brown fox jumped over the lazy dog",
+    "Four score and seven years ago",
+    "I have a dream"
+  };
+
+  OpSolver opsolver(_init);
+  Op::Operand astresult(astsolver.get());
+
+  boost::apply_visitor(opsolver, astresult);
+
+  std::cout << "query: "       << query
+	    << " r: "          << r
+	    << " results: "    << result
+	    << " astsolver: "  << astsolver.get()
+	    << " opsolver: "   << opsolver.get()
 	    << std::endl;
 
 }
