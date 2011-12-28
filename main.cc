@@ -228,9 +228,25 @@ namespace Op
     Type type() const { return m_type; }
 
     IntSet solve(const Strings &strings) const {
-      IntSet r1(Op::solve(strings, first)), r2(Op::solve(strings, second));
+      const IntSet r1(Op::solve(strings, first)), r2(Op::solve(strings, second));
       IntSet result;
+      std::insert_iterator<IntSet> ii(result, result.begin());
       
+      switch(m_type) {
+      case AND:
+	std::set_intersection(r1.begin(), r1.end(),
+			      r2.begin(), r2.end(),
+			      ii);
+	break;
+      case OR:
+	std::set_union(r1.begin(), r1.end(),
+		       r2.begin(), r2.end(),
+		       ii);
+	break;
+      default:
+	throw std::runtime_error("Illegal opcode");
+      }
+
       return result;
     }
 
