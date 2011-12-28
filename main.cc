@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <list>
+#include <stack>
 #include <vector>
 
 #include <boost/spirit/include/support_utree.hpp>
@@ -20,51 +21,6 @@ namespace qi = boost::spirit::qi;
 namespace ascii = boost::spirit::ascii;
 
 typedef std::set<unsigned> IntSet;
-
-void do_term(const std::vector<char> &term)
-{
-  std::cout << "term: ";
-
-  for (std::vector<char>::const_iterator iter(term.begin());
-       iter != term.end(); ++iter)
-    {
-      std::cout << *iter;
-    }
-
-  std::cout << std::endl;
-}
-
-class State
-{
-public:
-  typedef std::list<std::string> Strings;
-
-  State() {}
-  State(const Strings &strings) : m_state(strings) {}
-
-  void push(const std::string term)
-  {
-    Strings matched;
-
-    for (Strings::const_iterator iter(m_state.begin());
-	 iter != m_state.end();
-	 ++iter)
-      {
-	const std::string &item(*iter);
-
-	if (item.find(term) != item.npos)
-	  matched.push_back(item);
-      }
-
-    m_stack.push_back(matched);
-  }
-
-private:
-  typedef std::list<Strings> Stack;
-
-  Strings m_state;
-  Stack   m_stack;
-};
 
 namespace Ast
 {
@@ -179,6 +135,134 @@ struct query_grammar
 
 };
 
+namespace Op
+{
+  class Operation;
+
+  typedef boost::variant<
+    Ast::Term,
+    boost::recursive_wrapper< Operation >
+    > Operand;
+
+  class Operation : public std::pair<Operand, Operand>
+  {
+  public:
+    friend std::ostream& operator<<(std::ostream &os, const Operation &p);
+
+    enum Type {
+      AND,
+      OR,
+    };
+
+    Operation(Type type) : m_type(type) {}
+    Operation(Type type, const Operand &first, const Operand &second) :
+      std::pair<Operand, Operand>(first, second), m_type(type) {}
+
+    Type type() const { return m_type; }
+
+  private:
+    Type m_type;
+  };
+
+  std::ostream& operator<<(std::ostream &os, const Operation &p)
+  {
+    switch (p.m_type) {
+    case Operation::Type::AND:
+      os << "AND";
+      break;
+    case Operation::Type::OR:
+      os << "OR";
+      break;
+    default:
+      throw std::runtime_error("Illegal opcode");
+    }
+
+    os << "(" << p.first << "," << p.second << ")";
+    
+    return os;
+  }
+
+};
+
+class AstSolver : public boost::static_visitor<>
+{
+public:
+
+  Op::Operand get() {
+    assert(m_stack.size() == 1);
+
+    return m_stack.top();
+  }
+
+  void operator()(const Ast::Term &term) {
+    m_stack.push(Op::Operand(term));
+  }
+
+  void operator()(const Ast::Operation &o) {
+    AstSolver solver;
+
+    boost::apply_visitor(solver, o.m_operand);
+
+    Op::Operation::Type optype;
+    
+    switch(o.m_type) {
+    case '&':
+      optype = Op::Operation::AND;
+      break;
+    case '|':
+      optype = Op::Operation::OR;
+      break;
+    default:
+      throw std::runtime_error("unexpected operation type");
+    }
+
+    Op::Operation op(optype, m_stack.top(), solver.get());
+    
+    m_stack.pop();
+    m_stack.push(op);
+  }
+
+  void operator()(const Ast::Program &p) {
+    AstSolver solver;
+
+    boost::apply_visitor(solver, p.m_first);
+
+    for (Ast::Program::Operations::const_iterator iter(p.m_rest.begin());
+	 iter != p.m_rest.end(); ++iter)
+      {
+	Ast::Operand operand(*iter);
+
+	boost::apply_visitor(solver, operand);
+      }
+
+    m_stack.push(solver.get());
+  }
+
+#if 0
+  void push(const std::string term)
+  {
+    Strings matched;
+
+    for (Strings::const_iterator iter(m_state.begin());
+	 iter != m_state.end();
+	 ++iter)
+      {
+	const std::string &item(*iter);
+
+	if (item.find(term) != item.npos)
+	  matched.push_back(item);
+      }
+
+    m_stack.push_back(matched);
+  }
+#endif
+
+private:
+  typedef std::stack<Op::Operand> Stack;
+
+  Stack          m_stack;
+};
+
 int main(int argc, char **argv) {
   int ret;
   std::string query;
@@ -202,11 +286,13 @@ int main(int argc, char **argv) {
     return -1;
   }
 
+#if 0
   State::Strings _init = {
     "The quick brown fox jumped over the lazy dog",
     "Four score and seven years ago",
     "I have a dream"
   };
+#endif
 
   using boost::spirit::ascii::space;
   typedef std::string::iterator iterator_type;
@@ -218,8 +304,15 @@ int main(int argc, char **argv) {
 
   bool r = phrase_parse(query.begin(), query.end(), g, space, result);
 
+  AstSolver solver;
+  Ast::Operand operand(result);
+
+  boost::apply_visitor(solver, operand);
+
   std::cout << "query: "    << query
 	    << " r: "       << r
 	    << " results: " << result
+	    << " solver: "  << solver.get()
 	    << std::endl;
+
 }
