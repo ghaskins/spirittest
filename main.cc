@@ -122,10 +122,12 @@ struct query_grammar
     factor.name("factor");
     expression.name("expression");
 
+#if 0
     debug(group);
     debug(term);
     debug(factor);
     debug(expression);
+#endif
   }
   
   qi::rule<Iterator, Ast::Program(), ascii::space_type> expression;
