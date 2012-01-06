@@ -24,7 +24,7 @@ typedef std::set<unsigned> IntSet;
 
 namespace Ast
 {
-    typedef std::string Term;
+    struct Term;
     struct Operation;
     struct Program;
   
@@ -34,42 +34,70 @@ namespace Ast
 	boost::recursive_wrapper< Program >
 	> Operand;
 
-struct Operation
-{
-    char    m_type;
-    Operand m_operand;
-};
-
-std::ostream& operator<<(std::ostream &os, const Ast::Operation &o)
-{
-    os << o.m_operand << ", " << o.m_type;
-    
-    return os;
-}
-
-struct Program
-{
-    typedef std::list<Operation> Operations;
-
-    Operand    m_first;
-    Operations m_rest;
-};
-
-std::ostream& operator<<(std::ostream &os, const Ast::Program &p)
-{
-    os << "[" << p.m_first;
-    
-    for (Ast::Program::Operations::const_iterator iter(p.m_rest.begin());
-	 iter != p.m_rest.end(); ++iter)
+    struct Term
     {
-	os << ", " << *iter;
+	enum Qualifier {
+	    Q_NONE,
+	    Q_TYPE,
+	    Q_NAME,
+	    Q_ID
+	};
+
+	Term() : m_qual(Q_NONE) {}
+
+	Qualifier   m_qual;
+	std::string m_val;
+    };
+
+    std::ostream& operator<<(std::ostream &os, const Ast::Term &t)
+    {
+	os << t.m_qual << ":" << t.m_val;
+	
+	return os;
+    }
+
+    struct Operation
+    {
+	char    m_type;
+	Operand m_operand;
+    };
+    
+    std::ostream& operator<<(std::ostream &os, const Ast::Operation &o)
+    {
+	os << o.m_operand << ", " << o.m_type;
+	
+	return os;
     }
     
-    os << "]";
+    struct Program
+    {
+	typedef std::list<Operation> Operations;
+	
+	Operand    m_first;
+	Operations m_rest;
+    };
     
-    return os;
-}
+    std::ostream& operator<<(std::ostream &os, const Ast::Program &p)
+    {
+	os << "[" << p.m_first;
+	
+	for (Ast::Program::Operations::const_iterator iter(p.m_rest.begin());
+	     iter != p.m_rest.end(); ++iter)
+	{
+	    os << ", " << *iter;
+	}
+	
+	os << "]";
+	
+	return os;
+    }
 };
+
+BOOST_FUSION_ADAPT_STRUCT(
+    Ast::Term,
+    (Ast::Term::Qualifier, m_qual)
+    (std::string, m_val)
+    )
 
 BOOST_FUSION_ADAPT_STRUCT(
     Ast::Operation,
@@ -82,6 +110,19 @@ BOOST_FUSION_ADAPT_STRUCT(
     (Ast::Operand, m_first)
     (Ast::Program::Operations, m_rest)
     )
+
+struct qualifier_ : qi::symbols<char, unsigned>
+{
+    qualifier_()
+    {
+        add
+	    ("type", Ast::Term::Q_TYPE)
+	    ("name", Ast::Term::Q_NAME)
+	    ("id", Ast::Term::Q_ID)
+        ;
+    }
+
+} qualifier;
 
 template <typename Iterator>
 struct query_grammar
@@ -103,6 +144,7 @@ struct query_grammar
 	group       = lit('(') >> expression >> lit(')');
 	term = lexeme[
 	    !lit('(') >>
+	    -(qualifier >> lit(':')) >>
 	    +(
 		char_
 		- (
@@ -195,7 +237,7 @@ namespace Op
 	    for (int i(0); i < strings.size(); ++i) {
 		const std::string &item(strings[i]);
 	
-		if (item.find(m_term) != item.npos)
+		if (item.find(m_term.m_val) != item.npos)
 		    result.insert(i);
 	    }
       
