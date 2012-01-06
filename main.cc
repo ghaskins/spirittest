@@ -43,9 +43,17 @@ namespace Ast
 	    Q_ID
 	};
 
-	Term() : m_qual(Q_NONE) {}
+	enum Operation {
+	    OP_REGEX,
+	    OP_EQ,
+	    OP_GT,
+	    OP_LT
+	};
+
+	Term() : m_qual(Q_NONE), m_op(OP_REGEX) {}
 
 	Qualifier   m_qual;
+	Operation   m_op;
 	std::string m_val;
     };
 
@@ -96,6 +104,7 @@ namespace Ast
 BOOST_FUSION_ADAPT_STRUCT(
     Ast::Term,
     (Ast::Term::Qualifier, m_qual)
+    (Ast::Term::Operation, m_op)
     (std::string, m_val)
     )
 
@@ -124,6 +133,20 @@ struct qualifier_ : qi::symbols<char, unsigned>
 
 } qualifier;
 
+struct operation_ : qi::symbols<char, unsigned>
+{
+    operation_()
+    {
+        add
+	    (":", Ast::Term::OP_REGEX)
+	    ("=", Ast::Term::OP_EQ)
+	    (">", Ast::Term::OP_GT)
+	    ("<", Ast::Term::OP_LT)
+        ;
+    }
+
+} operation;
+
 template <typename Iterator>
 struct query_grammar
     : qi::grammar<Iterator, Ast::Program(), ascii::space_type>
@@ -144,7 +167,7 @@ struct query_grammar
 	group       = lit('(') >> expression >> lit(')');
 	term = lexeme[
 	    !lit('(') >>
-	    -(qualifier >> lit(':')) >>
+	    -(qualifier >> operation) >>
 	    +(
 		char_
 		- (
